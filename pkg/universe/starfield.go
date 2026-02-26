@@ -9,8 +9,12 @@ import (
 	"github.com/smasonuk/si3d/pkg/si3d"
 )
 
+var GalaxyStars *Galaxy
+var Seed int64
+
 func init() {
-	GalaxyStars = GenerateSpiralGalaxy(300000, 1772054134190328000)
+	Seed = int64(1772054134190328000)
+	GalaxyStars = GenerateSpiralGalaxy(300000, Seed)
 }
 
 type Starfield struct {
@@ -39,11 +43,9 @@ type Galaxy struct {
 	Stars []GalacticStar
 }
 
-var GalaxyStars *Galaxy
-
 // creates a procedural galaxy with a core and spiral arms.
 func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
-	rand.New(rand.NewSource(seed))
+	r := rand.New(rand.NewSource(seed))
 
 	galaxy := &Galaxy{
 		Stars: make([]GalacticStar, 0, totalStars),
@@ -65,13 +67,13 @@ func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
 	// 1. generate the galactic core
 	for i := 0; i < numCoreStars; i++ {
 		// Use normal (Gaussian) distribution to cluster stars tightly in the center
-		x := rand.NormFloat64() * (coreRadius / 3.0)
-		y := rand.NormFloat64() * (coreRadius / 3.0)
-		z := rand.NormFloat64() * (coreRadius / 3.0)
+		x := r.NormFloat64() * (coreRadius / 3.0)
+		y := r.NormFloat64() * (coreRadius / 3.0)
+		z := r.NormFloat64() * (coreRadius / 3.0)
 
 		// Core stars are generally older, yellower, and have lower average luminosity
-		// lum := math.Pow(rand.Float64(), 4.0) * 100.0 // Heavy bias towards dim stars
-		lum := math.Pow(rand.Float64(), 4.0) * 2000.0
+		// lum := math.Pow(r.Float64(), 4.0) * 100.0 // Heavy bias towards dim stars
+		lum := math.Pow(r.Float64(), 4.0) * 2000.0
 
 		galaxy.Stars = append(galaxy.Stars, GalacticStar{
 			Position:   si3d.NewVector3(x, y, z),
@@ -84,10 +86,10 @@ func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
 	for i := 0; i < numArmStars; i++ {
 		// Pick a random distance from the center.
 		// We use a square root to ensure even distribution across the disk area.
-		dist := math.Sqrt(rand.Float64()) * maxRadius
+		dist := math.Sqrt(r.Float64()) * maxRadius
 
 		// Which arm does this star belong to?
-		armIndex := rand.Intn(numArms)
+		armIndex := r.Intn(numArms)
 		armOffset := (float64(armIndex) / float64(numArms)) * 2.0 * math.Pi
 
 		// Calculate the base spiral angle
@@ -96,7 +98,7 @@ func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
 		// Add organic "fuzziness" to the arms.
 		// The spread gets wider the further out from the core you go.
 		spreadSpread := (dist / maxRadius) * 0.5
-		randomAngleOffset := rand.NormFloat64() * spreadSpread
+		randomAngleOffset := r.NormFloat64() * spreadSpread
 
 		// Final angle calculation
 		theta := spiralAngle + armOffset + randomAngleOffset
@@ -107,21 +109,21 @@ func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
 
 		// Calculate Y (height). The disk gets slightly thicker at the edges.
 		thicknessAtDist := diskThickness * (1.0 + (dist / maxRadius))
-		y := rand.NormFloat64() * (thicknessAtDist / 4.0)
+		y := r.NormFloat64() * (thicknessAtDist / 4.0)
 
 		// Arm stars are younger, bluer, and feature rare, incredibly bright super-giants
-		// lum := math.Pow(rand.Float64(), 6.0) * 10000.0 // Bias towards dim, but allows massive spikes
+		// lum := math.Pow(r.Float64(), 6.0) * 10000.0 // Bias towards dim, but allows massive spikes
 		// Arm stars are younger, bluer, and feature rare, incredibly bright super-giants
-		lum := math.Pow(rand.Float64(), 6.0) * 10000.0
+		lum := math.Pow(r.Float64(), 6.0) * 10000.0
 
-		isGas := rand.Float64() < 0.15 // 15% chance to be a gas cloud instead of a star
+		isGas := r.Float64() < 0.15 // 15% chance to be a gas cloud instead of a star
 
 		var starColor color.RGBA
 		var starLum float64
 
 		if isGas {
 			// Nebulae glow in bright pinks, purples, and cyans (H-alpha and Oxygen emissions)
-			if rand.Float64() > 0.5 {
+			if r.Float64() > 0.5 {
 				starColor = color.RGBA{220, 50, 150, 255} // Pink/Magenta
 			} else {
 				starColor = color.RGBA{50, 200, 250, 255} // Cyan
@@ -145,9 +147,9 @@ func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
 	numDustClouds := int(float64(totalStars) * dustRatio)
 
 	for i := 0; i < numDustClouds; i++ {
-		dist := math.Sqrt(rand.Float64()) * maxRadius
+		dist := math.Sqrt(r.Float64()) * maxRadius
 
-		armIndex := rand.Intn(numArms)
+		armIndex := r.Intn(numArms)
 		armOffset := (float64(armIndex) / float64(numArms)) * 2.0 * math.Pi
 		spiralAngle := armWrap * (dist / maxRadius)
 
@@ -155,17 +157,17 @@ func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
 		insideEdgeOffset := -0.15
 		spread := (dist / maxRadius) * 0.2 // Tighter spread than the stars
 
-		theta := spiralAngle + armOffset + insideEdgeOffset + (rand.NormFloat64() * spread)
+		theta := spiralAngle + armOffset + insideEdgeOffset + (r.NormFloat64() * spread)
 
 		x := dist * math.Cos(theta)
 		z := dist * math.Sin(theta)
 
 		// Dust is extremely flat compared to the rest of the disk
-		y := rand.NormFloat64() * (diskThickness / 8.0)
+		y := r.NormFloat64() * (diskThickness / 8.0)
 
 		galaxy.Stars = append(galaxy.Stars, GalacticStar{
 			Position:   si3d.NewVector3(x, y, z),
-			Luminosity: rand.Float64() * 8000.0, // Acts as "darkness" strength
+			Luminosity: r.Float64() * 8000.0, // Acts as "darkness" strength
 			IsDust:     true,
 		})
 	}
@@ -176,12 +178,12 @@ func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
 
 	// GENERATE THE GALACTIC HALO
 	for i := 0; i < numHaloStars; i++ {
-		x := rand.NormFloat64() * maxRadius
-		y := rand.NormFloat64() * maxRadius
-		z := rand.NormFloat64() * maxRadius
+		x := r.NormFloat64() * maxRadius
+		y := r.NormFloat64() * maxRadius
+		z := r.NormFloat64() * maxRadius
 
 		// Crank the luminosity up temporarily so they burn brightly into the sensor
-		lum := rand.Float64() * 5000.0 * 4
+		lum := r.Float64() * 5000.0 * 4
 
 		galaxy.Stars = append(galaxy.Stars, GalacticStar{
 			Position:   si3d.NewVector3(x, y, z),
@@ -193,7 +195,16 @@ func GenerateSpiralGalaxy(totalStars int, seed int64) *Galaxy {
 	return galaxy
 }
 
-func (g *Galaxy) TakeProbeSnapshot(cam *si3d.Camera, probeGalacticPos si3d.Vector3, width, height int, exposure float64) *image.RGBA {
+func (g *Galaxy) TakeProbeSnapshot(
+	cam *si3d.Camera,
+	probeGalacticPos si3d.Vector3,
+	width,
+	height int,
+	exposure float64,
+	seed int64,
+) *image.RGBA {
+
+	r := rand.New(rand.NewSource(seed))
 
 	// 1. 3-Channel Sensor Array (Red, Green, Blue)
 	sensorR := make([][]float64, width)
@@ -314,7 +325,7 @@ func (g *Galaxy) TakeProbeSnapshot(cam *si3d.Camera, probeGalacticPos si3d.Vecto
 	for x := 0; x < width; x++ {
 		for y := 0; y < height; y++ {
 			// Add "Sensor Noise" (grain)
-			noise := (rand.Float64() - 0.5) * 0.008
+			noise := (r.Float64() - 0.5) * 0.008
 
 			sR := math.Max(0, sensorR[x][y])
 			sG := math.Max(0, sensorG[x][y])
@@ -359,12 +370,19 @@ func clamp(val, min, max int) int {
 func (s *Starfield) GetStarField(height, width int) *image.RGBA {
 	galaxy := GalaxyStars
 
+	//print the first 10 stars to the console for debugging
+	for i := 0; i < 10 && i < len(galaxy.Stars); i++ {
+		star := galaxy.Stars[i]
+		println("Star", i, "Pos:", star.Position.X, star.Position.Y, star.Position.Z, "Lum:", star.Luminosity)
+	}
+
 	// Exposure of 50k - 100k is usually the "sweet spot" for this distance
 	snapshot := galaxy.TakeProbeSnapshot(
 		s.Camera,
 		s.Position,
 		width,
 		height,
-		80000.0)
+		80000.0,
+		Seed)
 	return snapshot
 }
