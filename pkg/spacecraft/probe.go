@@ -1,13 +1,20 @@
 package spacecraft
 
 import (
+	_ "embed"
+	"fmt"
 	"image"
+
+	"gocpu/pkg/compiler"
+	"gocpu/pkg/cpu"
+	"gocpu/pkg/peripherals"
 
 	"github.com/smasonuk/unknowngalaxy/pkg/comms"
 	"github.com/smasonuk/unknowngalaxy/pkg/universe"
-	"gocpu/pkg/cpu"
-	"gocpu/pkg/peripherals"
 )
+
+//go:embed probe_os.csrc
+var probeOSSource string
 
 // SpaceProbe bundles a physical probe, its virtual CPU, and the message receiver
 // peripheral, wiring them together through the game's message bus.
@@ -50,6 +57,16 @@ func NewSpaceProbe(id string, startPos *universe.GalacticPosition, scene *univer
 	bus.Subscribe(id, func(m comms.Message) {
 		_ = msgReceiver.PushMessage(m.Payload)
 	})
+
+	// Compile and load the probe OS into VM memory.
+	_, mc, err := compiler.Compile(probeOSSource, "")
+	if err != nil {
+		fmt.Printf("[SpaceProbe %s] OS compile error: %v\n", id, err)
+	} else if len(mc) > len(vm.Memory) {
+		fmt.Printf("[SpaceProbe %s] OS binary too large (%d bytes)\n", id, len(mc))
+	} else {
+		copy(vm.Memory[:], mc)
+	}
 
 	return sp
 }

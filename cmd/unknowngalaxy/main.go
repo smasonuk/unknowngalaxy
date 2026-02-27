@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"image/color"
+	"image/png"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,6 +17,31 @@ import (
 )
 
 const probeID = "Voyager-1"
+
+func saveImageToFile(img image.Image, filename string) {
+	f, err := os.Create(filename)
+	if err != nil {
+		fmt.Printf("EARTH: Failed to create %s: %v\n", filename, err)
+		return
+	}
+	defer f.Close()
+	if err := png.Encode(f, img); err != nil {
+		fmt.Printf("EARTH: Failed to encode image: %v\n", err)
+	}
+}
+
+func handleEarthMessage(msg comms.Message) {
+	if len(msg.Payload) == 16384 {
+		img, err := comms.DecodeRGB332(msg.Payload, 128, 128)
+		if err != nil {
+			fmt.Printf("EARTH: Failed to decode image from %s: %v\n", msg.SenderID, err)
+			return
+		}
+		filename := fmt.Sprintf("%s_capture.png", msg.SenderID)
+		saveImageToFile(img, filename)
+		fmt.Printf("EARTH: Received image from %s, saved to disk.\n", msg.SenderID)
+	}
+}
 
 func main() {
 	// Scene
@@ -30,6 +57,7 @@ func main() {
 
 	// Message bus
 	bus := comms.NewMessageBus()
+	bus.Subscribe("Earth", handleEarthMessage)
 
 	// Probe
 	startPos := universe.NewGalacticPosition(10000, 25000, 35000, 0, 0, 0, 0, -200.0, -400.0)
@@ -45,7 +73,6 @@ func main() {
 	ticker := time.NewTicker(time.Millisecond * 16) // ~60 Hz
 	defer ticker.Stop()
 
-	frame := 0
 	fmt.Println("Simulation running. Press Ctrl+C to stop.")
 
 	for {
@@ -54,14 +81,6 @@ func main() {
 			fmt.Println("Shutting down.")
 			return
 		case <-ticker.C:
-			frame++
-
-			// Every 60 frames (~1 s) push a dummy trigger to the probe.
-			if frame%60 == 0 {
-				bus.Send("Earth", probeID, []byte("TAKE_PICTURE"))
-				fmt.Printf("[frame %d] sent TAKE_PICTURE to %s\n", frame, probeID)
-			}
-
 			bus.Tick()
 			probe.Tick(1000)
 		}
