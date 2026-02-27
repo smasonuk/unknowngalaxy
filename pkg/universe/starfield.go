@@ -206,14 +206,19 @@ func (g *Galaxy) TakeProbeSnapshot(
 
 	r := rand.New(rand.NewSource(seed))
 
-	// 1. 3-Channel Sensor Array (Red, Green, Blue)
-	sensorR := make([][]float64, width)
-	sensorG := make([][]float64, width)
-	sensorB := make([][]float64, width)
+	// Maximum reach of your widest splat/flare (spikeLen = 12 + safety)
+	gutter := 15
+	bufWidth := width + (gutter * 2)
+	bufHeight := height + (gutter * 2)
+
+	// 1. 3-Channel Sensor Array (Red, Green, Blue) with invisible gutters
+	sensorR := make([][]float64, bufWidth)
+	sensorG := make([][]float64, bufWidth)
+	sensorB := make([][]float64, bufWidth)
 	for i := range sensorR {
-		sensorR[i] = make([]float64, height)
-		sensorG[i] = make([]float64, height)
-		sensorB[i] = make([]float64, height)
+		sensorR[i] = make([]float64, bufHeight)
+		sensorG[i] = make([]float64, bufHeight)
+		sensorB[i] = make([]float64, bufHeight)
 	}
 
 	viewMat := cam.GetMatrix()
@@ -236,15 +241,19 @@ func (g *Galaxy) TakeProbeSnapshot(
 			continue
 		}
 
-		screenX := int(si3d.ConvertToScreenX(float64(width), float64(height), camSpaceDir.X, camSpaceDir.Z))
-		screenY := int(si3d.ConvertToScreenY(float64(width), float64(height), camSpaceDir.Y, camSpaceDir.Z))
+		rawX := int(si3d.ConvertToScreenX(float64(width), float64(height), camSpaceDir.X, camSpaceDir.Z))
+		rawY := int(si3d.ConvertToScreenY(float64(width), float64(height), camSpaceDir.Y, camSpaceDir.Z))
 
-		// Ensure we have padding for splatting and flares
-		if screenX >= 15 && screenX < width-15 && screenY >= 15 && screenY < height-15 {
+		// We no longer subtract padding. If the center of the star is ON SCREEN, we draw it.
+		if rawX >= 0 && rawX < width && rawY >= 0 && rawY < height {
 
-			r := float64(star.BaseColor.R) / 255.0
+			// Shift the coordinates into the oversized buffer's space
+			screenX := rawX + gutter
+			screenY := rawY + gutter
+
+			r_col := float64(star.BaseColor.R) / 255.0
 			g_col := float64(star.BaseColor.G) / 255.0
-			b := float64(star.BaseColor.B) / 255.0
+			b_col := float64(star.BaseColor.B) / 255.0
 
 			if star.IsDust {
 				// NEGATIVE LIGHT (Dust Lane)
@@ -275,9 +284,9 @@ func (g *Galaxy) TakeProbeSnapshot(
 						weight := 1.0 / (distSqSplat + 1.0)
 						diffuseLight := (apparentBrightness * 0.15) * weight
 
-						sensorR[screenX+dx][screenY+dy] += diffuseLight * r
+						sensorR[screenX+dx][screenY+dy] += diffuseLight * r_col
 						sensorG[screenX+dx][screenY+dy] += diffuseLight * g_col
-						sensorB[screenX+dx][screenY+dy] += diffuseLight * b
+						sensorB[screenX+dx][screenY+dy] += diffuseLight * b_col
 					}
 				}
 			} else {
@@ -285,15 +294,15 @@ func (g *Galaxy) TakeProbeSnapshot(
 				center := apparentBrightness * 0.6
 				side := apparentBrightness * 0.1
 
-				sensorR[screenX][screenY] += center * r
+				sensorR[screenX][screenY] += center * r_col
 				sensorG[screenX][screenY] += center * g_col
-				sensorB[screenX][screenY] += center * b
+				sensorB[screenX][screenY] += center * b_col
 
 				offsets := [][]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 				for _, off := range offsets {
-					sensorR[screenX+off[0]][screenY+off[1]] += side * r
+					sensorR[screenX+off[0]][screenY+off[1]] += side * r_col
 					sensorG[screenX+off[0]][screenY+off[1]] += side * g_col
-					sensorB[screenX+off[0]][screenY+off[1]] += side * b
+					sensorB[screenX+off[0]][screenY+off[1]] += side * b_col
 				}
 
 				// If the star is incredibly bright, it creates a cross flare on the lens
@@ -309,9 +318,9 @@ func (g *Galaxy) TakeProbeSnapshot(
 
 						spikeOffsets := [][]int{{s, 0}, {-s, 0}, {0, s}, {0, -s}}
 						for _, off := range spikeOffsets {
-							sensorR[screenX+off[0]][screenY+off[1]] += lightVal * r
+							sensorR[screenX+off[0]][screenY+off[1]] += lightVal * r_col
 							sensorG[screenX+off[0]][screenY+off[1]] += lightVal * g_col
-							sensorB[screenX+off[0]][screenY+off[1]] += lightVal * b
+							sensorB[screenX+off[0]][screenY+off[1]] += lightVal * b_col
 						}
 					}
 				}
@@ -324,12 +333,17 @@ func (g *Galaxy) TakeProbeSnapshot(
 
 	for x := 0; x < width; x++ {
 		for y := 0; y < height; y++ {
+
+			// Shift our read coordinates to account for the gutter
+			bufX := x + gutter
+			bufY := y + gutter
+
 			// Add "Sensor Noise" (grain)
 			noise := (r.Float64() - 0.5) * 0.008
 
-			sR := math.Max(0, sensorR[x][y])
-			sG := math.Max(0, sensorG[x][y])
-			sB := math.Max(0, sensorB[x][y])
+			sR := math.Max(0, sensorR[bufX][bufY])
+			sG := math.Max(0, sensorG[bufX][bufY])
+			sB := math.Max(0, sensorB[bufX][bufY])
 
 			finalR := sR / (1.0 + sR)
 			finalG := sG / (1.0 + sG)
@@ -338,23 +352,185 @@ func (g *Galaxy) TakeProbeSnapshot(
 			// Space background tint
 			bgR, bgG, bgB := 0.02, 0.02, 0.03
 
-			r := clamp(int((finalR+bgR+noise)*255), 0, 255)
-			g_c := clamp(int((finalG+bgG+noise)*255), 0, 255)
-			b := clamp(int((finalB+bgB+noise)*255), 0, 255)
+			outR := clamp(int((finalR+bgR+noise)*255), 0, 255)
+			outG := clamp(int((finalG+bgG+noise)*255), 0, 255)
+			outB := clamp(int((finalB+bgB+noise)*255), 0, 255)
 
 			// Darken every even horizontal row by 20% to simulate a telemetry feed
 			if y%2 == 0 {
-				r = int(float64(r) * 0.8)
-				g_c = int(float64(g_c) * 0.8)
-				b = int(float64(b) * 0.8)
+				outR = int(float64(outR) * 0.8)
+				outG = int(float64(outG) * 0.8)
+				outB = int(float64(outB) * 0.8)
 			}
 
-			img.Set(x, y, color.RGBA{uint8(r), uint8(g_c), uint8(b), 255})
+			img.Set(x, y, color.RGBA{uint8(outR), uint8(outG), uint8(outB), 255})
 		}
 	}
 
 	return img
 }
+
+// func (g *Galaxy) TakeProbeSnapshot(
+// 	cam *si3d.Camera,
+// 	probeGalacticPos si3d.Vector3,
+// 	width,
+// 	height int,
+// 	exposure float64,
+// 	seed int64,
+// ) *image.RGBA {
+
+// 	r := rand.New(rand.NewSource(seed))
+
+// 	// 1. 3-Channel Sensor Array (Red, Green, Blue)
+// 	sensorR := make([][]float64, width)
+// 	sensorG := make([][]float64, width)
+// 	sensorB := make([][]float64, width)
+// 	for i := range sensorR {
+// 		sensorR[i] = make([]float64, height)
+// 		sensorG[i] = make([]float64, height)
+// 		sensorB[i] = make([]float64, height)
+// 	}
+
+// 	viewMat := cam.GetMatrix()
+
+// 	// 2. Accumulate light (Photons)
+// 	for _, star := range g.Stars {
+// 		relPos := si3d.Subtract(star.Position, probeGalacticPos)
+// 		distSq := relPos.X*relPos.X + relPos.Y*relPos.Y + relPos.Z*relPos.Z
+// 		if distSq < 1.0 {
+// 			distSq = 1.0
+// 		}
+
+// 		apparentBrightness := (star.Luminosity / distSq) * exposure
+
+// 		dist := math.Sqrt(distSq)
+// 		dir := si3d.NewVector3(relPos.X/dist, relPos.Y/dist, relPos.Z/dist)
+// 		camSpaceDir := viewMat.RotateVector3(dir)
+
+// 		if camSpaceDir.Z <= 0 {
+// 			continue
+// 		}
+
+// 		screenX := int(si3d.ConvertToScreenX(float64(width), float64(height), camSpaceDir.X, camSpaceDir.Z))
+// 		screenY := int(si3d.ConvertToScreenY(float64(width), float64(height), camSpaceDir.Y, camSpaceDir.Z))
+
+// 		// Ensure we have padding for splatting and flares
+// 		padding := 15
+// 		if screenX >= padding && screenX < width-padding && screenY >= padding && screenY < height-padding {
+
+// 			r := float64(star.BaseColor.R) / 255.0
+// 			g_col := float64(star.BaseColor.G) / 255.0
+// 			b := float64(star.BaseColor.B) / 255.0
+
+// 			if star.IsDust {
+// 				// NEGATIVE LIGHT (Dust Lane)
+// 				for dx := -2; dx <= 2; dx++ {
+// 					for dy := -2; dy <= 2; dy++ {
+// 						distSqSplat := float64(dx*dx + dy*dy)
+// 						if distSqSplat > 4.0 {
+// 							continue
+// 						}
+
+// 						weight := 1.0 / (distSqSplat + 1.0)
+// 						darkness := (apparentBrightness * 0.4) * weight
+
+// 						sensorR[screenX+dx][screenY+dy] -= darkness
+// 						sensorG[screenX+dx][screenY+dy] -= darkness
+// 						sensorB[screenX+dx][screenY+dy] -= darkness
+// 					}
+// 				}
+// 			} else if star.IsGas {
+// 				// WIDE SPLAT (Nebula Cloud)
+// 				for dx := -3; dx <= 3; dx++ {
+// 					for dy := -3; dy <= 3; dy++ {
+// 						distSqSplat := float64(dx*dx + dy*dy)
+// 						if distSqSplat > 9.0 {
+// 							continue
+// 						}
+
+// 						weight := 1.0 / (distSqSplat + 1.0)
+// 						diffuseLight := (apparentBrightness * 0.15) * weight
+
+// 						sensorR[screenX+dx][screenY+dy] += diffuseLight * r
+// 						sensorG[screenX+dx][screenY+dy] += diffuseLight * g_col
+// 						sensorB[screenX+dx][screenY+dy] += diffuseLight * b
+// 					}
+// 				}
+// 			} else {
+// 				// TIGHT SPLAT (Normal Star)
+// 				center := apparentBrightness * 0.6
+// 				side := apparentBrightness * 0.1
+
+// 				sensorR[screenX][screenY] += center * r
+// 				sensorG[screenX][screenY] += center * g_col
+// 				sensorB[screenX][screenY] += center * b
+
+// 				offsets := [][]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+// 				for _, off := range offsets {
+// 					sensorR[screenX+off[0]][screenY+off[1]] += side * r
+// 					sensorG[screenX+off[0]][screenY+off[1]] += side * g_col
+// 					sensorB[screenX+off[0]][screenY+off[1]] += side * b
+// 				}
+
+// 				// If the star is incredibly bright, it creates a cross flare on the lens
+// 				if apparentBrightness > 15.0 {
+// 					// The brighter the star, the longer the spike (capped at 12 pixels)
+// 					spikeLen := int(math.Min(12.0, apparentBrightness/3.0))
+// 					spikeStrength := apparentBrightness * 0.05
+
+// 					for s := 1; s <= spikeLen; s++ {
+// 						// Fade the light out towards the tips of the spike
+// 						fade := 1.0 - (float64(s) / float64(spikeLen))
+// 						lightVal := spikeStrength * fade
+
+// 						spikeOffsets := [][]int{{s, 0}, {-s, 0}, {0, s}, {0, -s}}
+// 						for _, off := range spikeOffsets {
+// 							sensorR[screenX+off[0]][screenY+off[1]] += lightVal * r
+// 							sensorG[screenX+off[0]][screenY+off[1]] += lightVal * g_col
+// 							sensorB[screenX+off[0]][screenY+off[1]] += lightVal * b
+// 						}
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	// 3. Develop with Noise, Tone Mapping, and Scanlines
+// 	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+// 	for x := 0; x < width; x++ {
+// 		for y := 0; y < height; y++ {
+// 			// Add "Sensor Noise" (grain)
+// 			noise := (r.Float64() - 0.5) * 0.008
+
+// 			sR := math.Max(0, sensorR[x][y])
+// 			sG := math.Max(0, sensorG[x][y])
+// 			sB := math.Max(0, sensorB[x][y])
+
+// 			finalR := sR / (1.0 + sR)
+// 			finalG := sG / (1.0 + sG)
+// 			finalB := sB / (1.0 + sB)
+
+// 			// Space background tint
+// 			bgR, bgG, bgB := 0.02, 0.02, 0.03
+
+// 			r := clamp(int((finalR+bgR+noise)*255), 0, 255)
+// 			g_c := clamp(int((finalG+bgG+noise)*255), 0, 255)
+// 			b := clamp(int((finalB+bgB+noise)*255), 0, 255)
+
+// 			// Darken every even horizontal row by 20% to simulate a telemetry feed
+// 			if y%2 == 0 {
+// 				r = int(float64(r) * 0.8)
+// 				g_c = int(float64(g_c) * 0.8)
+// 				b = int(float64(b) * 0.8)
+// 			}
+
+// 			img.Set(x, y, color.RGBA{uint8(r), uint8(g_c), uint8(b), 255})
+// 		}
+// 	}
+
+// 	return img
+// }
 
 // Helper function
 func clamp(val, min, max int) int {
@@ -369,12 +545,6 @@ func clamp(val, min, max int) int {
 
 func (s *Starfield) GetStarField(height, width int) *image.RGBA {
 	galaxy := GalaxyStars
-
-	//print the first 10 stars to the console for debugging
-	for i := 0; i < 10 && i < len(galaxy.Stars); i++ {
-		star := galaxy.Stars[i]
-		println("Star", i, "Pos:", star.Position.X, star.Position.Y, star.Position.Z, "Lum:", star.Luminosity)
-	}
 
 	// Exposure of 50k - 100k is usually the "sweet spot" for this distance
 	snapshot := galaxy.TakeProbeSnapshot(
