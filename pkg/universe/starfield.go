@@ -543,6 +543,7 @@ func clamp(val, min, max int) int {
 	return val
 }
 
+// TODO: image is an interface, change to pass by value
 func (s *Starfield) GetStarField(height, width int) *image.RGBA {
 	galaxy := GalaxyStars
 

@@ -7,6 +7,7 @@ import (
 	"image/color/palette"
 	"image/draw"
 	"image/gif"
+	"image/png"
 	"math"
 	"os"
 
@@ -26,6 +27,19 @@ func NewProbe(starfieldPosition si3d.Vector3, cam *si3d.Camera) *Probe {
 	return &Probe{
 		StarfieldPosition: starfieldPosition,
 		Camera:            cam,
+	}
+}
+
+func saveImageToFile(img image.Image, filename string) {
+	f, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	err = png.Encode(f, img)
+	if err != nil {
+		panic(err)
 	}
 }
 
@@ -91,6 +105,10 @@ func main() {
 		bounds := frameImg.Bounds()
 		palettedImage := image.NewPaletted(bounds, palette.Plan9)
 		draw.Draw(palettedImage, palettedImage.Rect, frameImg, bounds.Min, draw.Over)
+
+		if i == 1 {
+			saveImageToFile(frameImg, fmt.Sprintf("frame_%d.png", i))
+		}
 
 		// 11. Append to the GIF sequence
 		outGif.Image = append(outGif.Image, palettedImage)
