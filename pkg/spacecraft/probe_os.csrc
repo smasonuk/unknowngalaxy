@@ -19,8 +19,79 @@
 #define IMAGE_BUFFER 0x4000
 #define IMAGE_SIZE   16384
 
-void take_picture_and_send(byte* send_to_address) {
-    // 1. Configure the camera buffer, dimensions, then trigger capture.
+
+// Fills all 256 palette slots so that palette[i] represents 
+// an equal mix of R, G, and B mapped to RGB565.
+// void setup_grayscale_palette() {
+//     int i = 0;
+//     while (i < 256) {
+//         // Drop lowest bits to fit 8-bit values into 5/6-bit RGB565 channels
+//         int r5 = i >> 3; 
+//         int g6 = i >> 2; 
+//         int b5 = i >> 3; 
+
+//         set_palette(i, (r5 << 11) | (g6 << 5) | b5);
+//         i = i + 1;
+//     }
+// }
+
+
+int* MSG_CMD = 0xFC00; //writing into slot 0
+int* MSG_TO  = 0xFC02;
+int* MSG_BODY = 0xFC04;
+int* MSG_LEN = 0xFC06;
+
+
+
+// Scans the 16 expansion slots (0xFC00 - 0xFCFF).
+// Returns the base address of the peripheral if found, or 0 if not found.
+int* find_peripheral(char* target_name) {
+    for (int slot = 0; slot < 16; slot++) {
+        int* base_addr = (int*)(0xFC00 + (slot * 16));
+        char* name_ptr = (char*)(0xFC00 + (slot * 16) + 8);
+        
+        if (strcmp(name_ptr, target_name) == 0) {
+            return base_addr;
+        }
+    }
+    return 0;
+}
+
+int strcmp(char* s1, char* s2) {
+    while (*s1 != 0 && *s2 != 0) {
+        if (*s1 != *s2) {
+            return *s1 - *s2;
+        }
+        s1++;
+        s2++;
+    }
+    return *s1 - *s2;
+}
+
+
+////
+
+
+void take_picture_and_send(char* send_to_address) {
+
+     int* cam = find_peripheral("CAMERA");
+    if (cam == 0) {
+        // print("Camera not found!\n");
+        return;
+    }
+
+    // --- CONFIGURATION ---
+    int use_grayscale = 1; // Change to 0 for colour
+
+    if (use_grayscale == 1) {
+        // setup_grayscale_palette();
+        cam[8] = 1; // offset 0x10: mode = Grayscale
+    } else {
+        // setup_rgb332_palette();
+        cam[8] = 0; // offset 0x10: mode = RGB332
+    }
+
+
     int* cam_buf = (int*)CAMERA_BUF;
     *cam_buf = IMAGE_BUFFER;
 

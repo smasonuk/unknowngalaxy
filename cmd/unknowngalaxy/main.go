@@ -50,7 +50,7 @@ func main() {
 		color.RGBA{R: 153, G: 196, B: 210, A: 255},
 		35, 800, 800, 42,
 	)
-	mountains.SetDrawLinesOnly(true)
+	// mountains.SetDrawLinesOnly(false)
 
 	scene := universe.NewLocalScene(10000, 25000, 35000, 0, 0, 0)
 	scene.AddEntity(&si3d.Entity{Model: mountains, X: 0, Y: 0, Z: 0})
