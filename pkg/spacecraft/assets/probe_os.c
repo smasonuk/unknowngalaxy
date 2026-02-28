@@ -1,61 +1,96 @@
 #include <video.c>
 #include <vfs.c>
+#include <stdio.c>
 
 #define INBOX_BUFFER 0x8000
 
-// TODO: modify to use interrupts
+int* INT_MASK = 0xFF09;
+int* MMIO_SLOT_BASE = 0xFE00;
+
+
+void isr() {
+    print("new interrupt\n");
+    int pending = *INT_MASK;
+
+    int* slot_ptr = find_peripheral("MSGRECV");
+    if (slot_ptr == 0) {
+        print("Error: Message Receiver Peripheral not found!\n");
+        return;
+    }
+
+    int address = (int)slot_ptr;
+    int offset = address - 0xFE00;
+    int RECV_SLOT = offset / 16;
+
+    print_int(RECV_SLOT);
+
+
+    if (RECV_SLOT != -1) { // this is the slot where the message reciever is attatched
+        int mask = 1;
+        for (int i = 0; i < RECV_SLOT; i++) {
+            mask = mask * 2;
+        }
+
+        if ((pending & mask) != 0) {
+            print("new message");
+
+            char buffer[256];
+            char sender_buffer[256];
+            char* filename = "INBOX.MSG";
+            char* sender_filename = "SENDER.MSG";
+
+            int size = vfs_size_calc((int*)filename);
+            int sender_size = vfs_size_calc((int*)sender_filename);
+
+            if (size >= 0 && sender_size >= 0) {
+                if (size < 255 && sender_size < 255) {
+                    int err_sender = vfs_read((int*)sender_filename, (int*)sender_buffer);
+                    int err_msg = vfs_read((int*)filename, (int*)buffer);
+                    
+                    if (err_sender == 0 && err_msg == 0) {
+                        sender_buffer[sender_size] = 0;
+                        buffer[size] = 0;
+                        
+                        print("Message Received from ");
+                        print(sender_buffer);
+                        print(": ");
+                        print(buffer);
+                        print("\n");
+
+                        take_picture_and_send(sender_buffer);
+                    } else {
+                        print("Error reading messages. Sender err: ");
+                        print_int(err_sender);
+                        print(", Msg err: ");
+                        print_int(err_msg);
+                        print("\n");
+                    }
+                } else {
+                    print("Error: Message or Sender too large\n");
+                }
+                vfs_delete((int*)filename);
+                vfs_delete((int*)sender_filename);
+            } else {
+                print("Error: INBOX.MSG or SENDER.MSG not found or invalid\n");
+            }
+
+            int* slot_addr = 0xFE00 + (RECV_SLOT * 16);
+            *slot_addr = 1;
+
+            // Only clear our interrupt
+            *INT_MASK = mask;
+        }
+    }
+}
 
 int main() {
     print("Voyager-1 OS starting...\n");
     
-    // Initial picture
-    // take_picture_and_send("Earth");
-    
-    int* msgrecv = find_peripheral("MSGRECV");
-    if (msgrecv == 0) {
-        print("MSGRECV not found!\n");
-        return 1;
-    }
-    
+    enable_interrupts();
+    print("Interrupts enabled. Waiting for messages...\n");
+
     while (1) {
-        print("id:");
-        // print(msgrecv);
-        // print("\n");
-        
-        // Check MSGRECV state (offset 0)
-        if (*msgrecv == 1) {
-            print("Message received!\n");
-            
-            // Read command from INBOX.MSG
-            char* inbox_file = "INBOX.MSG";
-            int size = vfs_size_calc(inbox_file);
-            if (size > 0) {
-                vfs_read(inbox_file, INBOX_BUFFER);
-                // Null terminate the command string
-                char* cmd = (char*)INBOX_BUFFER;
-                cmd[size] = 0;
-                
-                print("Command: ");
-                print(cmd);
-                print("\n");
-                
-                if (strcmp(cmd, "TAKE_PICTURE") == 0) {
-                    print("Taking picture...\n");
-                    take_picture_and_send("Earth");
-                    print("sent...\n");
-                } else {
-                    print("Unknown command\n");
-                }
-            }
-            
-            // ACK message (clears it from queue)
-            *msgrecv = 1; 
-        }
-        
-        // Small delay to prevent pegging the CPU
-        for (int i = 0; i < 5000; i++) {
-            asm("NOP");
-        }
+        wait_for_interrupt();
     }
     
     return 0;
