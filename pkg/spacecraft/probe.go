@@ -4,6 +4,9 @@ import (
 	_ "embed"
 	"fmt"
 	"image"
+	"image/draw"
+	"image/png"
+	"os"
 
 	"gocpu/pkg/compiler"
 	"gocpu/pkg/cpu"
@@ -13,6 +16,8 @@ import (
 	"github.com/smasonuk/unknowngalaxy/pkg/universe"
 )
 
+// +go:embed assets/basic_probe_os.c
+//
 //go:embed assets/probe_os.c
 var probeOSSource string
 
@@ -22,6 +27,50 @@ type SpaceProbe struct {
 	Physical    *universe.Probe
 	VM          *cpu.CPU
 	MsgReceiver *peripherals.MessageReceiver
+}
+
+func ConvertToRGBA(img image.Image) *image.RGBA {
+	// 1. Check if it is already an RGBA image via type assertion.
+	// If it is, we can just return it and save memory/processing time.
+	if rgba, ok := img.(*image.RGBA); ok {
+		return rgba
+	}
+
+	// 2. If it's not, get the original image's bounds
+	bounds := img.Bounds()
+
+	// 3. Create a new RGBA image with those bounds
+	rgba := image.NewRGBA(bounds)
+
+	// 4. Draw the original image onto the new RGBA image.
+	// We use draw.Src to overwrite the pixels entirely.
+	draw.Draw(rgba, bounds, img, bounds.Min, draw.Src)
+
+	return rgba
+}
+
+func WriteImageToFile(img image.Image, filename string) {
+	f, err := os.Create(filename)
+	if err != nil {
+		fmt.Printf("EARTH: Failed to create %s: %v\n", filename, err)
+		return
+	}
+	defer f.Close()
+	if err := png.Encode(f, img); err != nil {
+		fmt.Printf("EARTH: Failed to encode image: %v\n", err)
+	}
+}
+
+func WriteImageToFile2(img image.RGBA, filename string) {
+	f, err := os.Create(filename)
+	if err != nil {
+		fmt.Printf("EARTH: Failed to create %s: %v\n", filename, err)
+		return
+	}
+	defer f.Close()
+	if err := png.Encode(f, &img); err != nil {
+		fmt.Printf("EARTH: Failed to encode image: %v\n", err)
+	}
 }
 
 // NewSpaceProbe creates a SpaceProbe, mounts its peripherals, and subscribes to the bus.
@@ -38,7 +87,13 @@ func NewSpaceProbe(id string, startPos *universe.GalacticPosition, scene *univer
 	// Slot 1: Camera — captures the probe's local scene view.
 	captureFunc := func() *image.RGBA {
 		img := scene.TakePicture(physical, 128, 128)
-		rgba, _ := img.(*image.RGBA)
+		WriteImageToFile(img, "1111.png")
+
+		ConvertToRGBA(img)
+		rgba := ConvertToRGBA(img)
+
+		WriteImageToFile2(*rgba, "2222.png")
+
 		return rgba
 	}
 	vm.MountPeripheral(1, peripherals.NewCameraPeripheral(vm, 1, captureFunc))

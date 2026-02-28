@@ -45,7 +45,7 @@ func saveImageToFile(img image.Image, filename string) {
 
 func main() {
 	// Bumped to 120 frames for a smoother, slightly slower 360-degree flight
-	frames := 280
+	frames := 60
 	outGif := &gif.GIF{}
 
 	// 1. Where is the probe in the GALAXY?
