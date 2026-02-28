@@ -51,6 +51,7 @@ func main() {
 		35, 800, 800, 42,
 	)
 	// mountains.SetDrawLinesOnly(false)
+	mountains.SetDontDrawOutlines(false)
 
 	scene := universe.NewLocalScene(10000, 25000, 35000, 0, 0, 0)
 	scene.AddEntity(&si3d.Entity{Model: mountains, X: 0, Y: 0, Z: 0})

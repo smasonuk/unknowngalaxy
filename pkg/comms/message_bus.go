@@ -1,6 +1,9 @@
 package comms
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // Message is a routed byte payload between two named participants.
 type Message struct {
@@ -34,6 +37,7 @@ func (b *MessageBus) Subscribe(id string, receiver ReceiverFunc) {
 
 // Send enqueues a message. The payload is copied defensively.
 func (b *MessageBus) Send(senderID string, targetID string, payload []byte) {
+	fmt.Printf("senderId: %s, targetId: %s\n", senderID, targetID)
 	p := make([]byte, len(payload))
 	copy(p, payload)
 	b.mu.Lock()

@@ -13,7 +13,7 @@ import (
 	"github.com/smasonuk/unknowngalaxy/pkg/universe"
 )
 
-//go:embed probe_os.csrc
+//go:embed assets/probe_os.c
 var probeOSSource string
 
 // SpaceProbe bundles a physical probe, its virtual CPU, and the message receiver
