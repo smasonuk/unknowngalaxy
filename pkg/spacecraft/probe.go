@@ -55,7 +55,7 @@ func NewSpaceProbe(id string, startPos *universe.GalacticPosition, scene *univer
 
 	// Subscribe to the bus so incoming messages are pushed into the receiver.
 	bus.Subscribe(id, func(m comms.Message) {
-		_ = msgReceiver.PushMessage(m.Payload)
+		_ = msgReceiver.PushMessage(m.SenderID, m.Payload)
 	})
 
 	// Compile and load the probe OS into VM memory.

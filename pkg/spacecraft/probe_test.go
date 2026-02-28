@@ -33,15 +33,33 @@ func TestSpaceProbe_ReceivesMessageViaBus(t *testing.T) {
 		t.Fatalf(".msgq.sys not found after bus.Tick(): %v", err)
 	}
 
-	// Queue format: [len: uint16 LE][payload bytes]
-	if len(data) < 2+len(payload) {
-		t.Fatalf("queue too short: got %d bytes, want at least %d", len(data), 2+len(payload))
+	// Queue format: [SenderLen: uint8][SenderStr][BodyLen: uint16][Body]
+	if len(data) < 1 {
+		t.Fatalf("queue too short: got %d bytes, want at least 1", len(data))
 	}
-	storedLen := binary.LittleEndian.Uint16(data[0:2])
+	
+	senderLen := int(data[0])
+	expectedSender := "Earth"
+	if senderLen != len(expectedSender) {
+		t.Errorf("stored sender length = %d, want %d", senderLen, len(expectedSender))
+	}
+	
+	if len(data) < 1+senderLen+2+len(payload) {
+		t.Fatalf("queue too short for full payload")
+	}
+
+	storedSender := string(data[1 : 1+senderLen])
+	if storedSender != expectedSender {
+		t.Errorf("stored sender = %q, want %q", storedSender, expectedSender)
+	}
+
+	storedLen := binary.LittleEndian.Uint16(data[1+senderLen : 1+senderLen+2])
 	if int(storedLen) != len(payload) {
 		t.Errorf("stored length = %d, want %d", storedLen, len(payload))
 	}
-	if !bytes.Equal(data[2:2+len(payload)], payload) {
-		t.Errorf("stored payload = %q, want %q", data[2:], payload)
+	
+	storedPayload := data[1+senderLen+2 : 1+senderLen+2+int(storedLen)]
+	if !bytes.Equal(storedPayload, payload) {
+		t.Errorf("stored payload = %q, want %q", storedPayload, payload)
 	}
 }
