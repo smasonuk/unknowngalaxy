@@ -6,10 +6,9 @@
 
 int* INT_MASK = 0xFF09;
 int* MMIO_SLOT_BASE = 0xFE00;
-
+char* COMMAND_TAKE_PICTURE = "TAKE_PICTURE";
 
 void isr() {
-    print("new interrupt\n");
     int pending = *INT_MASK;
 
     int* slot_ptr = find_peripheral("MSGRECV");
@@ -21,9 +20,6 @@ void isr() {
     int address = (int)slot_ptr;
     int offset = address - 0xFE00;
     int RECV_SLOT = offset / 16;
-
-    print_int(RECV_SLOT);
-
 
     if (RECV_SLOT != -1) { // this is the slot where the message reciever is attatched
         int mask = 1;
@@ -57,7 +53,12 @@ void isr() {
                         print(buffer);
                         print("\n");
 
-                        take_picture_and_send(sender_buffer);
+                        if (strcmp(COMMAND_TAKE_PICTURE, (char*)buffer) == 0  ){
+                            take_picture_and_send(sender_buffer);
+                        } else {
+                            print("Unknown message:");
+                            print(buffer);
+                        }
                     } else {
                         print("Error reading messages. Sender err: ");
                         print_int(err_sender);
